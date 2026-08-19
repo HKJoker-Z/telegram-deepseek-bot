@@ -1,4 +1,5 @@
 import os
+import sqlite3
 
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -26,6 +27,7 @@ except ValueError as exc:
 DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
 DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash")
 PROXY_URL = os.getenv("PROXY_URL", "").strip()
+DB_PATH = "chat.db"
 
 os.environ.pop("ALL_PROXY", None)
 os.environ.pop("all_proxy", None)
@@ -41,6 +43,60 @@ client = OpenAI(
 )
 
 
+def init_db():
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                role TEXT NOT NULL,
+                content TEXT NOT NULL
+            )
+            """
+        )
+
+
+def load_history(user_id):
+    with sqlite3.connect(DB_PATH) as conn:
+        rows = conn.execute(
+            """
+            SELECT role, content
+            FROM messages
+            WHERE user_id = ?
+            ORDER BY id DESC
+            LIMIT 20
+            """,
+            (user_id,),
+        ).fetchall()
+    return [{"role": role, "content": content} for role, content in reversed(rows)]
+
+
+def save_exchange(user_id, user_text, assistant_text):
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.executemany(
+            "INSERT INTO messages (user_id, role, content) VALUES (?, ?, ?)",
+            [
+                (user_id, "user", user_text),
+                (user_id, "assistant", assistant_text),
+            ],
+        )
+        conn.execute(
+            """
+            DELETE FROM messages
+            WHERE user_id = ?
+              AND id NOT IN (
+                  SELECT id
+                  FROM messages
+                  WHERE user_id = ?
+                  ORDER BY id DESC
+                  LIMIT 20
+              )
+            """,
+            (user_id, user_id),
+        )
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.effective_user.id != ALLOWED_TELEGRAM_USER_ID:
         return
@@ -51,8 +107,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if update.effective_user.id != ALLOWED_TELEGRAM_USER_ID:
         return
 
-    history = context.user_data.setdefault("history", [])
-    messages = history + [{"role": "user", "content": update.message.text}]
+    user_id = update.effective_user.id
+    user_text = update.message.text
+    history = load_history(user_id)
+    messages = history + [{"role": "user", "content": user_text}]
 
     try:
         response = client.chat.completions.create(
@@ -65,15 +123,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await update.message.reply_text("Sorry, the AI request failed.")
         return
 
-    history.extend([
-        {"role": "user", "content": update.message.text},
-        {"role": "assistant", "content": reply},
-    ])
-    history[:] = history[-20:]
+    save_exchange(user_id, user_text, reply)
     await update.message.reply_text(reply or "Sorry, the AI returned an empty response.")
 
 
 def main():
+    init_db()
     builder = Application.builder().token(TELEGRAM_BOT_TOKEN)
     if PROXY_URL:
         builder = builder.proxy(PROXY_URL).get_updates_proxy(PROXY_URL)
