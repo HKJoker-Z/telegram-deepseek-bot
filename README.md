@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-当前仅完成项目初始化。`bot.py` 只验证 Python 入口可以运行，尚未实现 Telegram、DeepSeek、SQLite 或 systemd 功能。
+项目初始化已完成，DeepSeek API connectivity verified；Telegram integration not yet implemented。`bot.py` 仍只验证 Python 入口可以运行，尚未实现 Telegram 聊天、SQLite 或 systemd 功能。
 
 ## 技术栈
 
