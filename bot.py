@@ -55,6 +55,15 @@ def init_db():
             )
             """
         )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS memories (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                content TEXT NOT NULL
+            )
+            """
+        )
 
 
 def load_history(user_id):
@@ -102,6 +111,36 @@ def clear_history(user_id):
         conn.execute("DELETE FROM messages WHERE user_id = ?", (user_id,))
 
 
+def load_memories(user_id):
+    with sqlite3.connect(DB_PATH) as conn:
+        return conn.execute(
+            """
+            SELECT id, content
+            FROM memories
+            WHERE user_id = ?
+            ORDER BY id
+            """,
+            (user_id,),
+        ).fetchall()
+
+
+def add_memory(user_id, content):
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute(
+            "INSERT INTO memories (user_id, content) VALUES (?, ?)",
+            (user_id, content),
+        )
+
+
+def delete_memory(user_id, memory_id):
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.execute(
+            "DELETE FROM memories WHERE id = ? AND user_id = ?",
+            (memory_id, user_id),
+        )
+        return cursor.rowcount
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.effective_user.id != ALLOWED_TELEGRAM_USER_ID:
         return
@@ -115,6 +154,54 @@ async def new_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     await update.message.reply_text("New conversation started.")
 
 
+async def remember(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if update.effective_user.id != ALLOWED_TELEGRAM_USER_ID:
+        return
+
+    content = " ".join(context.args).strip()
+    if not content:
+        await update.message.reply_text("Usage: /remember <text>")
+        return
+
+    add_memory(update.effective_user.id, content)
+    await update.message.reply_text("Remembered.")
+
+
+async def memory(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if update.effective_user.id != ALLOWED_TELEGRAM_USER_ID:
+        return
+
+    memories = load_memories(update.effective_user.id)
+    if not memories:
+        await update.message.reply_text("No saved memories.")
+        return
+
+    text = "\n".join(f"{memory_id}. {content}" for memory_id, content in memories)
+    if len(text) > 4000:
+        text = text[:3997] + "..."
+    await update.message.reply_text(text)
+
+
+async def forget(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if update.effective_user.id != ALLOWED_TELEGRAM_USER_ID:
+        return
+
+    if not context.args:
+        await update.message.reply_text("Usage: /forget <id>")
+        return
+
+    try:
+        memory_id = int(context.args[0])
+    except ValueError:
+        await update.message.reply_text("Usage: /forget <id>")
+        return
+
+    if delete_memory(update.effective_user.id, memory_id):
+        await update.message.reply_text("Memory deleted.")
+    else:
+        await update.message.reply_text("Memory not found.")
+
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.effective_user.id != ALLOWED_TELEGRAM_USER_ID:
         return
@@ -122,7 +209,23 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     user_id = update.effective_user.id
     user_text = update.message.text
     history = load_history(user_id)
-    messages = history + [{"role": "user", "content": user_text}]
+    memories = load_memories(user_id)
+    messages = []
+    if memories:
+        memory_text = "\n".join(f"- {content}" for _, content in memories)
+        messages.append(
+            {
+                "role": "system",
+                "content": (
+                    "The following are long-term memories explicitly saved by the user. "
+                    "Use them when relevant, do not mention them unnecessarily, and "
+                    "treat the current user message as higher priority if it conflicts.\n\n"
+                    + memory_text
+                ),
+            }
+        )
+    messages.extend(history)
+    messages.append({"role": "user", "content": user_text})
 
     try:
         response = client.chat.completions.create(
@@ -148,6 +251,9 @@ def main():
     application = builder.build()
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("new", new_conversation))
+    application.add_handler(CommandHandler("remember", remember))
+    application.add_handler(CommandHandler("memory", memory))
+    application.add_handler(CommandHandler("forget", forget))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     application.run_polling()
 

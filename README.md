@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-项目初始化和最小 Telegram ↔ DeepSeek chat flow 已验证。当前使用 long polling，仅支持单用户文字消息，并通过 SQLite 持久化最近 10 轮对话；支持 `/start` 和 `/new`。Bot 已由 systemd 常驻管理，开机启动已启用，异常退出会自动重启。
+项目初始化和最小 Telegram ↔ DeepSeek chat flow 已验证。当前使用 long polling，仅支持单用户文字消息，并通过 SQLite 持久化最近 10 轮对话和用户显式保存的长期记忆；支持 `/start`、`/new`、`/remember`、`/memory` 和 `/forget`。Bot 已由 systemd 常驻管理，开机启动已启用，异常退出会自动重启。
 
 ## 技术栈
 
@@ -23,7 +23,15 @@ cp .env.example .env
 python bot.py
 ```
 
-当前入口会读取 `.env`、初始化项目根目录的 `chat.db` 并访问 Telegram/DeepSeek。`/new` 会清空当前用户的对话历史；systemd service 负责长期运行。
+当前入口会读取 `.env`、初始化项目根目录的 `chat.db` 并访问 Telegram/DeepSeek。`/new` 只清空当前对话历史，不删除长期记忆；长期记忆只能通过 `/remember` 显式保存。systemd service 负责长期运行。
+
+Bot 命令：
+
+- `/start`
+- `/new`
+- `/remember <text>`
+- `/memory`
+- `/forget <id>`
 
 systemd 管理命令：
 
@@ -45,7 +53,3 @@ journalctl -u telegram-deepseek-bot -f
 - `PROXY_URL`
 
 真实 `.env` 不应提交到 Git。
-
-## 当前未使用
-
-- 长期记忆
