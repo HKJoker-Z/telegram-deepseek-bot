@@ -4,13 +4,13 @@
 
 ## 当前状态
 
-项目初始化和最小 Telegram ↔ DeepSeek chat flow 已验证。当前使用 long polling，仅支持单用户文字消息；尚无 conversation memory，尚未配置 systemd。
+项目初始化和最小 Telegram ↔ DeepSeek chat flow 已验证。当前使用 long polling，仅支持单用户文字消息，并保留最近 10 轮内存对话；Bot 重启会清空历史，尚未使用 SQLite 或配置 systemd。
 
 ## 技术栈
 
 - Python 3.12
 - `python-telegram-bot`
-- OpenAI Python SDK（用于后续连接 DeepSeek 兼容 API）
+- OpenAI Python SDK（用于连接 DeepSeek 兼容 API）
 - `python-dotenv`
 
 ## 本地/服务器运行
@@ -23,7 +23,7 @@ cp .env.example .env
 python bot.py
 ```
 
-当前入口不会读取 `.env`，也不会访问任何外部 API。后续常驻运行时再配置 systemd service。
+当前入口会读取 `.env` 并访问 Telegram/DeepSeek；后续常驻运行时再配置 systemd service。
 
 ## 环境变量
 
@@ -34,13 +34,11 @@ python bot.py
 - `DEEPSEEK_MODEL`
 - `ALLOWED_TELEGRAM_USER_ID`
 - `DEEPSEEK_BASE_URL`
+- `PROXY_URL`
 
 真实 `.env` 不应提交到 Git。
 
-## 尚未实现
+## 当前未使用
 
-- Telegram Bot API long polling
-- DeepSeek API 调用和 Telegram 回复
-- 单用户访问控制
 - SQLite 聊天记录与长期记忆
 - systemd 常驻服务

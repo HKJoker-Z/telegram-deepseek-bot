@@ -51,17 +51,25 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if update.effective_user.id != ALLOWED_TELEGRAM_USER_ID:
         return
 
+    history = context.user_data.setdefault("history", [])
+    messages = history + [{"role": "user", "content": update.message.text}]
+
     try:
         response = client.chat.completions.create(
             model=DEEPSEEK_MODEL,
-            messages=[{"role": "user", "content": update.message.text}],
+            messages=messages,
         )
-        reply = response.choices[0].message.content
+        reply = response.choices[0].message.content or ""
     except Exception as exc:
         print(f"DeepSeek request failed: {type(exc).__name__}")
         await update.message.reply_text("Sorry, the AI request failed.")
         return
 
+    history.extend([
+        {"role": "user", "content": update.message.text},
+        {"role": "assistant", "content": reply},
+    ])
+    history[:] = history[-20:]
     await update.message.reply_text(reply or "Sorry, the AI returned an empty response.")
 
 
