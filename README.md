@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-项目初始化已完成，DeepSeek API connectivity verified；Telegram integration not yet implemented。`bot.py` 仍只验证 Python 入口可以运行，尚未实现 Telegram 聊天、SQLite 或 systemd 功能。
+项目初始化和最小 Telegram ↔ DeepSeek chat flow 已验证。当前使用 long polling，仅支持单用户文字消息；尚无 conversation memory，尚未配置 systemd。
 
 ## 技术栈
 
