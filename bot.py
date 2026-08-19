@@ -97,10 +97,22 @@ def save_exchange(user_id, user_text, assistant_text):
         )
 
 
+def clear_history(user_id):
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute("DELETE FROM messages WHERE user_id = ?", (user_id,))
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.effective_user.id != ALLOWED_TELEGRAM_USER_ID:
         return
     await update.message.reply_text("Telegram DeepSeek Bot is running.")
+
+
+async def new_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if update.effective_user.id != ALLOWED_TELEGRAM_USER_ID:
+        return
+    clear_history(update.effective_user.id)
+    await update.message.reply_text("New conversation started.")
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -135,6 +147,7 @@ def main():
 
     application = builder.build()
     application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("new", new_conversation))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     application.run_polling()
 
